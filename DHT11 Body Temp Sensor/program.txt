@@ -1,0 +1,316 @@
+#include <Wire.h>
+#include "FirebaseESP8266.h"
+#include <ESP8266WiFi.h>
+#include "DHT.h"
+#include <WiFiUdp.h>
+#include <NTPClient.h>
+#define FIREBASE_HOST "women-safety-93296-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "9oEzeBKSq8jzgfxEi861zeGHSBlfBuTTtqibHmTX"
+
+
+// Declare the Firebase Data object in the global scope
+FirebaseData firebaseData;
+
+
+DHT dht(D2, DHT11);
+
+double T, P;
+char status;
+WiFiClient client;
+
+
+String apiKey = "AIzaSyADd2JSSzNQvGCztaJ7-BAOl1bHiWtSKAY";
+const char *ssid =  "OPPO A15";
+const char *pass =  "12345678";
+
+const long utcOffsetInSeconds = 28800;
+//----------------------------------------Define NTP Client to get time
+WiFiUDP ntpUDP;
+
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
+
+String weekDays[7]={"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
+//Month names
+String months[12]={"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+
+
+
+void setup() {
+  Serial.begin(115200);
+  delay(10);
+
+  Wire.begin();
+  dht.begin();
+  WiFi.begin(ssid, pass);
+
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+
+  // Initialize a NTPClient to get time
+  timeClient.begin();
+  // Set offset time in seconds to adjust for your timezone, for example:
+  // GMT +1 = 3600
+  // GMT +8 = 28800
+  // GMT -1 = -3600
+  // GMT 0 = 0
+  timeClient.setTimeOffset(21600);
+
+  
+}
+
+void loop() {
+
+//  //Get time from the internet and format the display.
+//  timeClient.update();
+//  String hr, mn, sc;
+//  if (timeClient.getHours() < 10) {
+//    hr = "0" + String(timeClient.getHours());
+//  }
+//  else {
+//    hr = String(timeClient.getHours());
+//  }
+//
+//  if (timeClient.getMinutes() < 10) {
+//    mn = "0" + String(timeClient.getMinutes());
+//  }
+//  else {
+//    mn = String(timeClient.getMinutes());
+//  }
+//
+//  if (timeClient.getSeconds() < 10) {
+//    sc = "0" + String(timeClient.getSeconds());
+//  }
+//  else {
+//    sc = String(timeClient.getSeconds());
+//  }
+//
+//  String TimeNow = hr + ":" + mn + ":" + sc;
+//
+//  //Get Date from internet
+//  unsigned long epochTime = timeClient.getEpochTime();
+//  struct tm *ptm = gmtime ((time_t *)&epochTime);
+//
+//  int monthDay = ptm->tm_mday;
+//  int currentMonth = ptm->tm_mon + 1;
+//  int currentYear = ptm->tm_year + 1900;
+//  String currentDate = String(monthDay) + "-" + String(currentMonth) + "-" + String(currentYear);
+//
+
+
+
+timeClient.update();
+
+  time_t epochTime = timeClient.getEpochTime();
+  Serial.print("Epoch Time: ");
+  Serial.println(epochTime);
+  
+  String formattedTime = timeClient.getFormattedTime();
+  Serial.print("Formatted Time: ");
+  Serial.println(formattedTime);  
+
+  int currentHour = timeClient.getHours();
+  Serial.print("Hour: ");
+  Serial.println(currentHour);  
+
+  int currentMinute = timeClient.getMinutes();
+  Serial.print("Minutes: ");
+  Serial.println(currentMinute); 
+   
+  int currentSecond = timeClient.getSeconds();
+  Serial.print("Seconds: ");
+  Serial.println(currentSecond);  
+
+  String weekDay = weekDays[timeClient.getDay()];
+  Serial.print("Week Day: ");
+  Serial.println(weekDay);    
+
+  //Get a time structure
+  struct tm *ptm = gmtime ((time_t *)&epochTime); 
+
+  int monthDay = ptm->tm_mday;
+  Serial.print("Month day: ");
+  Serial.println(monthDay);
+
+  int currentMonth = ptm->tm_mon+1;
+  Serial.print("Month: ");
+  Serial.println(currentMonth);
+
+  String currentMonthName = months[currentMonth-1];
+  Serial.print("Month name: ");
+  Serial.println(currentMonthName);
+
+  int currentYear = ptm->tm_year+1900;
+  Serial.print("Year: ");
+  Serial.println(currentYear);
+
+  //Print complete date:
+  String currentDate = String(currentYear) + "-" + String(currentMonth) + "-" + String(monthDay);
+  String TimeNow = String(currentHour) + ":" + String(currentMinute) + ":" + String(currentSecond);
+  Serial.print("Current date: ");
+  Serial.println(currentDate);
+
+  Serial.println("");
+  //DHT11 sensor
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+
+  Serial.print("Temperature: ");
+  Serial.println(t);
+  Serial.print("Humidity: ");
+  Serial.println(h);
+
+  //Weather History in Firebase
+  if (Firebase.setFloat(firebaseData, "/WeatherEye/" + currentDate + "/" + TimeNow + "/Temperature", t))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+  if (Firebase.setFloat(firebaseData, "/WeatherEye/" + currentDate + "/" + TimeNow + "/Humidity", h))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+
+  if (Firebase.setString(firebaseData, "/WeatherEye/" + currentDate + "/" + TimeNow + "/Time", TimeNow))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+  if (Firebase.setString(firebaseData, "/WeatherEye/" + currentDate + "/" + TimeNow + "/Date", currentDate))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+
+  //Weather Live Data
+  if (Firebase.setFloat(firebaseData, "/WeatherEye/Temperature", t))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+  if (Firebase.setFloat(firebaseData, "/WeatherEye/Humidity", h))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+  if (Firebase.setString(firebaseData, "/WeatherEye/Time", TimeNow))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+  if (Firebase.setString(firebaseData, "/WeatherEye/Date", currentDate))
+  {
+    Serial.println("PASSED");
+    Serial.println("PATH: " + firebaseData.dataPath());
+    Serial.println("TYPE: " + firebaseData.dataType());
+    Serial.println("ETag: " + firebaseData.ETag());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + firebaseData.errorReason());
+    Serial.println("------------------------------------");
+    Serial.println();
+  }
+
+
+  delay(300000);
+}

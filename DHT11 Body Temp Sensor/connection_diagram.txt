@@ -1,0 +1,6 @@
+DHT11  VS ESP8266
+
+
+- PIN    = GND
++ PIN    = 3.3 V
+OUT PIN  = D2

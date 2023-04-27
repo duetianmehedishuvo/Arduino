@@ -1,0 +1,5 @@
+GND=GND
+vin=3.3v
+int=d0
+sda=d2
+scl=d1
